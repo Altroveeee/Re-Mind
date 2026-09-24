@@ -23,6 +23,21 @@ export const useStore = create(
         )
       })),
 
+      //Elimina il nodo e le sue connessioni
+      removeNode: (nodeId) => set((state) => ({
+        nodes: state.nodes.filter((node) => node.id !== nodeId),
+        edges: state.edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
+      })),
+
+      // Sincronizzazione massiva del testo dall'editor ai nodi
+      syncNodeTexts: (updates) => set((state) => ({
+        nodes: state.nodes.map((node) => 
+          updates[node.id] !== undefined 
+            ? { ...node, data: { ...node.data, label: updates[node.id] } } 
+            : node
+        )
+      })),
+
       onNodesChange: (changes) => set({
         nodes: applyNodeChanges(changes, get().nodes),
       }),
