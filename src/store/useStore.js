@@ -6,11 +6,29 @@ export const useStore = create(
   persist(
     (set, get) => ({
       blocks: {},
-      setBlocks: (newBlocks) => set({ blocks: newBlocks }),
+        setBlocks: (newBlocks) => set({ blocks: newBlocks }),
 
-      nodes: [], 
-      edges: [], 
+        nodes: [], 
+        edges: [], 
 
+      editorContent: '<h1>Il Vuoto Artistico</h1><p>Inizia a scrivere il tuo flusso di pensiero qui...</p>',
+        setEditorContent: (content) => set({ editorContent: content }),
+
+        // MACCHINA A STATI DEL LAYOUT
+        // 1 = Solo Testo, 2 = Split, 3 = Solo Mappa, 4 = Solo Mappa Astratta
+        viewMode: 2, 
+        setViewMode: (mode) => set({ viewMode: mode }),
+        
+        showHighlights: true,
+        toggleHighlights: () => set((state) => ({ showHighlights: !state.showHighlights })),
+
+        nodes: [],
+
+      editorContent: '<h1>Il Vuoto Artistico</h1><p>Inizia a scrivere il tuo flusso di pensiero qui...</p>',
+        setEditorContent: (content) => set({ editorContent: content }),
+
+        nodes: [],
+        edges: [],
       addNode: (node) => set((state) => ({ 
         nodes: [...state.nodes, node] 
       })),

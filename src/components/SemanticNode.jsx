@@ -6,6 +6,9 @@ export default function SemanticNode({ id, data }) {
   const updateNodeData = useStore((state) => state.updateNodeData);
   const removeNode = useStore((state) => state.removeNode);
   
+  // 1. Estraiamo lo stato della visualizzazione dal cervello globale
+  const viewMode = useStore((state) => state.viewMode); 
+  
   const textareaRef = useRef(null);
 
   // Regola l'altezza al montaggio e ogni volta che il testo cambia
@@ -55,6 +58,24 @@ export default function SemanticNode({ id, data }) {
     reader.readAsDataURL(file);
   };
 
+  // ---------------------------------------------------------
+  // LA MUTAZIONE ASTRATTA (STATO 4)
+  // Se lo slider è su "Sintesi", il codice si ferma qui e restituisce questo.
+  // ---------------------------------------------------------
+  if (viewMode === 4) {
+    return (
+      <div className="bg-white border-2 border-gray-900 p-2 font-bold uppercase text-[10px] tracking-widest text-center shadow-[3px_3px_0px_0px_rgba(17,24,39,1)] transition-transform hover:-translate-y-[1px]">
+        <Handle type="target" position={Position.Top} className="w-2 h-2 bg-gray-900 rounded-none border-none" />
+        {data.title || 'NODO SENZA NOME'}
+        <Handle type="source" position={Position.Bottom} className="w-2 h-2 bg-gray-900 rounded-none border-none" />
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------
+  // RITORNO STANDARD (STATI 2 e 3)
+  // Se lo slider NON è su 4, il codice ignora il blocco sopra e disegna la card completa.
+  // ---------------------------------------------------------
   return (
     <div className="bg-white border-2 border-gray-900 rounded-md p-4 w-72 shadow-[4px_4px_0px_0px_rgba(17,24,39,1)] transition-transform hover:-translate-y-1 hover:shadow-[6px_6px_0px_0px_rgba(17,24,39,1)] group relative">
       
