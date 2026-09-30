@@ -64,11 +64,18 @@ export default function SemanticNode({ id, data }) {
   // ---------------------------------------------------------
   if (viewMode === 4) {
     return (
-      <div className="bg-white border-2 border-gray-900 p-2 font-bold uppercase text-[10px] tracking-widest text-center shadow-[3px_3px_0px_0px_rgba(17,24,39,1)] transition-transform hover:-translate-y-[1px]">
-        <Handle type="target" position={Position.Top} className="w-2 h-2 bg-gray-900 rounded-none border-none" />
-        {data.title || 'NODO SENZA NOME'}
-        <Handle type="source" position={Position.Bottom} className="w-2 h-2 bg-gray-900 rounded-none border-none" />
-      </div>
+    <div className="bg-white border-2 border-gray-900 p-2 font-bold uppercase text-[10px] tracking-widest text-center shadow-[3px_3px_0px_0px_rgba(17,24,39,1)] transition-transform hover:-translate-y-[1px]">
+      
+      {/* I 4 punti cardinali con i loro ID obbligatori. Identici alla vista normale. */}
+      <Handle type="target" position={Position.Top} id="top" className="w-2 h-2 bg-gray-900 rounded-none border-none" />
+      <Handle type="target" position={Position.Left} id="left" className="w-2 h-2 bg-gray-900 rounded-none border-none" />
+      
+      {data.title || 'NODO SENZA NOME'}
+      
+      <Handle type="source" position={Position.Right} id="right" className="w-2 h-2 bg-gray-900 rounded-none border-none" />
+      <Handle type="source" position={Position.Bottom} id="bottom" className="w-2 h-2 bg-gray-900 rounded-none border-none" />
+
+    </div>
     );
   }
 
@@ -88,8 +95,9 @@ export default function SemanticNode({ id, data }) {
         ✕
       </button>
 
-      <Handle type="target" position={Position.Top} className="w-3 h-3 bg-gray-900 border-none rounded-sm" />
-      
+     <Handle type="target" position={Position.Top} id="top" className="w-3 h-3 bg-gray-900 border-none rounded-sm" />
+     <Handle type="target" position={Position.Left} id="left" className="w-3 h-3 bg-gray-900 border-none rounded-sm" />
+
       <div className="flex flex-col gap-3">
         <input 
           type="text"
@@ -132,7 +140,8 @@ export default function SemanticNode({ id, data }) {
         </label>
       </div>
 
-      <Handle type="source" position={Position.Bottom} className="w-3 h-3 bg-gray-900 border-none rounded-sm" />
+      <Handle type="source" position={Position.Right} id="right" className="w-3 h-3 bg-gray-900 border-none rounded-sm" />
+      <Handle type="source" position={Position.Bottom} id="bottom" className="w-3 h-3 bg-gray-900 border-none rounded-sm" />
     </div>
   );
 }

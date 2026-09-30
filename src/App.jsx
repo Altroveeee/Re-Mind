@@ -83,7 +83,7 @@ export default function App() {
         {viewMode <= 2 && (
           <div 
             className={`h-full border-gray-900 transition-all duration-300 ease-in-out bg-white overflow-hidden relative flex flex-col
-              ${viewMode === 1 ? 'w-full max-w-4xl mx-auto border-l-2 border-r-2' : 'w-1/2 border-r-2'}`}
+              ${viewMode === 1 ? 'w-full' : 'w-1/2 border-r-2'}`}
           >
             <div className="absolute top-0 right-0 bg-gray-900 text-white text-[9px] font-bold uppercase tracking-widest px-2 py-1 z-10">Livello 1</div>
             <TextEditorView />

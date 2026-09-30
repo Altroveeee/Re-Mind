@@ -1,34 +1,29 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware'; // <-- Il siero della memoria
+import { persist } from 'zustand/middleware';
 import { applyNodeChanges, applyEdgeChanges, addEdge } from 'reactflow';
 
 export const useStore = create(
   persist(
     (set, get) => ({
+      // 1. STATI STRUTTURALI
       blocks: {},
-        setBlocks: (newBlocks) => set({ blocks: newBlocks }),
+      setBlocks: (newBlocks) => set({ blocks: newBlocks }),
 
-        nodes: [], 
-        edges: [], 
+      viewMode: 2, 
+      setViewMode: (mode) => set({ viewMode: mode }),
+      
+      showHighlights: true,
+      toggleHighlights: () => set((state) => ({ showHighlights: !state.showHighlights })),
 
+      // 2. L'EDITOR LINEARE
       editorContent: '<h1>Il Vuoto Artistico</h1><p>Inizia a scrivere il tuo flusso di pensiero qui...</p>',
-        setEditorContent: (content) => set({ editorContent: content }),
+      setEditorContent: (content) => set({ editorContent: content }),
 
-        // MACCHINA A STATI DEL LAYOUT
-        // 1 = Solo Testo, 2 = Split, 3 = Solo Mappa, 4 = Solo Mappa Astratta
-        viewMode: 2, 
-        setViewMode: (mode) => set({ viewMode: mode }),
-        
-        showHighlights: true,
-        toggleHighlights: () => set((state) => ({ showHighlights: !state.showHighlights })),
+      // 3. L'ARENA SPAZIALE (Dichiarati UNA sola volta)
+      nodes: [],
+      edges: [], 
 
-        nodes: [],
-
-      editorContent: '<h1>Il Vuoto Artistico</h1><p>Inizia a scrivere il tuo flusso di pensiero qui...</p>',
-        setEditorContent: (content) => set({ editorContent: content }),
-
-        nodes: [],
-        edges: [],
+      // 4. LOGICA DI MUTAZIONE NODI
       addNode: (node) => set((state) => ({ 
         nodes: [...state.nodes, node] 
       })),
@@ -41,13 +36,11 @@ export const useStore = create(
         )
       })),
 
-      //Elimina il nodo e le sue connessioni
       removeNode: (nodeId) => set((state) => ({
         nodes: state.nodes.filter((node) => node.id !== nodeId),
         edges: state.edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId)
       })),
 
-      // Sincronizzazione massiva del testo dall'editor ai nodi
       syncNodeTexts: (updates) => set((state) => ({
         nodes: state.nodes.map((node) => 
           updates[node.id] !== undefined 
@@ -56,6 +49,7 @@ export const useStore = create(
         )
       })),
 
+      // 5. MOTORE MATEMATICO REACT FLOW
       onNodesChange: (changes) => set({
         nodes: applyNodeChanges(changes, get().nodes),
       }),
@@ -69,7 +63,7 @@ export const useStore = create(
       }),
     }),
     {
-      name: 'remind-knowledge-base', // Il nome del database nel browser
+      name: 'remind-knowledge-base',
     }
   )
 );

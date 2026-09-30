@@ -1,10 +1,9 @@
 import React from 'react';
-import ReactFlow, { Background, Controls, MiniMap } from 'reactflow';
+import ReactFlow, { Background, Controls, ConnectionMode } from 'reactflow'; 
 import 'reactflow/dist/style.css';
+import SemanticNode from './SemanticNode';
 import { useStore } from '../store/useStore';
-import SemanticNode from './SemanticNode'; // <-- 1. Importa il design
 
-// 2. Crea il dizionario dei nodi personalizzati
 const nodeTypes = {
   semantic: SemanticNode,
 };
@@ -12,24 +11,37 @@ const nodeTypes = {
 export default function SpatialMapView() {
   const nodes = useStore((state) => state.nodes);
   const edges = useStore((state) => state.edges);
+  
   const onNodesChange = useStore((state) => state.onNodesChange);
   const onEdgesChange = useStore((state) => state.onEdgesChange);
   const onConnect = useStore((state) => state.onConnect);
 
-  return (
-    <div className="w-full h-full min-h-[70vh] bg-white border border-gray-200 rounded-lg shadow-sm">
-      <ReactFlow 
-        nodes={nodes} 
-        edges={edges} 
+return (
+    <div className="w-full h-full relative">
+      
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
-        nodeTypes={nodeTypes} // <-- 3. Passa il dizionario a React Flow
+        nodeTypes={nodeTypes}
+        deleteKeyCode={['Backspace', 'Delete']}
+        connectionMode={ConnectionMode.Loose} 
+        
+        // --- LA DIRETTIVA DI SELEZIONE MULTIPLA ---
+        // multiSelectionKeyCode: Permette di cliccare più nodi tenendo premuto Shift
+        // selectionKeyCode: Permette di disegnare il rettangolo di selezione tenendo premuto Shift e trascinando
+        multiSelectionKeyCode="Shift"
+        selectionKeyCode="Shift"
+        
         fitView
+        className="bg-[#f4f4f4]"
       >
-        <Background color="#f3f4f6" gap={16} />
-        <Controls />
-        <MiniMap />
+        <Background color="#111827" gap={16} size={1} />
+        <Controls 
+          className="bg-white border-2 border-gray-900 rounded-none shadow-[4px_4px_0px_0px_rgba(17,24,39,1)]" 
+        />
       </ReactFlow>
     </div>
   );
