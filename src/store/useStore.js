@@ -9,8 +9,42 @@ export const useStore = create(
       blocks: {},
       setBlocks: (newBlocks) => set({ blocks: newBlocks }),
 
-      viewMode: 2, 
-      setViewMode: (mode) => set({ viewMode: mode }),
+      // 1. STATI STRUTTURALI DINAMICI
+      activePanels: ['editor', 'map'], // Di default partiamo con Testo e Nodi
+      
+      togglePanel: (panelId) => set((state) => {
+        const isCurrentlyActive = state.activePanels.includes(panelId);
+        
+        if (isCurrentlyActive) {
+          // Impedisce all'utente di chiudere tutti i pannelli e rimanere a fissare il vuoto
+          if (state.activePanels.length === 1) return state; 
+          return { activePanels: state.activePanels.filter(id => id !== panelId) };
+        } else {
+          // Aggiunge il nuovo pannello all'array
+          return { activePanels: [...state.activePanels, panelId] };
+        }
+      }),
+
+      // --- FILTRI VISIVI DEI NODI (L'ex Sintesi) ---
+      // 'full' (tutto), 'no-images' (senza immagini), 'titles-only' (solo titoli)
+      nodeViewMode: 'full',
+      setNodeViewMode: (mode) => set({ nodeViewMode: mode }),
+
+      // --- IL GLOSSARIO INDIPENDENTE ---
+      glossaryTerms: [],
+      addGlossaryTerm: (term) => set((state) => {
+        // Evita duplicati se la parola esiste già
+        if (state.glossaryTerms.some(t => t.word === term)) return state;
+        return {
+          glossaryTerms: [...state.glossaryTerms, { id: `term-${Date.now()}`, word: term, definition: '' }]
+        };
+      }),
+      updateGlossaryDefinition: (id, definition) => set((state) => ({
+        glossaryTerms: state.glossaryTerms.map(t => t.id === id ? { ...t, definition } : t)
+      })),
+      removeGlossaryTerm: (id) => set((state) => ({
+        glossaryTerms: state.glossaryTerms.filter(t => t.id !== id)
+      })),
       
       showHighlights: true,
       toggleHighlights: () => set((state) => ({ showHighlights: !state.showHighlights })),

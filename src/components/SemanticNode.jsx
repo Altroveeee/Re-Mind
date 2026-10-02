@@ -1,13 +1,14 @@
 import React, { useRef, useEffect } from 'react';
 import { Handle, Position } from 'reactflow';
 import { useStore } from '../store/useStore';
+import { useViewStore } from './SpatialMapView';
 
 export default function SemanticNode({ id, data }) {
   const updateNodeData = useStore((state) => state.updateNodeData);
   const removeNode = useStore((state) => state.removeNode);
   
-  // 1. Estraiamo lo stato della visualizzazione dal cervello globale
-  const viewMode = useStore((state) => state.viewMode); 
+  // 1. Estraiamo lo stato della visualizzazione dal cervello dello slider
+  const viewMode = useViewStore((state) => state.viewMode); 
   
   const textareaRef = useRef(null);
 
@@ -59,18 +60,34 @@ export default function SemanticNode({ id, data }) {
   };
 
   // ---------------------------------------------------------
-  // LA MUTAZIONE ASTRATTA (STATO 4)
-  // Se lo slider è su "Sintesi", il codice si ferma qui e restituisce questo.
+  // LA MUTAZIONE ASTRATTA (STATO 'sintetica')
+  // Se lo slider è su "Sintetica", ghigliottiniamo corpo e immagine, tenendo solo il titolo.
   // ---------------------------------------------------------
-  if (viewMode === 4) {
+  if (viewMode === 'sintetica') {
     return (
-    <div className="bg-white border-2 border-gray-900 p-2 font-bold uppercase text-[10px] tracking-widest text-center shadow-[3px_3px_0px_0px_rgba(17,24,39,1)] transition-transform hover:-translate-y-[1px]">
+    <div className="bg-white border-2 border-gray-900 p-2 font-bold uppercase text-[10px] tracking-widest text-center shadow-[3px_3px_0px_0px_rgba(17,24,39,1)] transition-transform hover:-translate-y-[1px] nodrag cursor-pointer group">
       
-      {/* I 4 punti cardinali con i loro ID obbligatori. Identici alla vista normale. */}
+      {/* Bottone di Eliminazione Nodo (Hover) - aggiunto anche qui per poterli cancellare nella vista astratta */}
+      <button 
+        onClick={(e) => { e.stopPropagation(); removeNode(id); }}
+        className="absolute -top-3 -right-3 bg-red-500 text-white border-2 border-gray-900 rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 z-10"
+        title="Elimina Nodo"
+      >
+        ✕
+      </button>
+
       <Handle type="target" position={Position.Top} id="top" className="w-2 h-2 bg-gray-900 rounded-none border-none" />
       <Handle type="target" position={Position.Left} id="left" className="w-2 h-2 bg-gray-900 rounded-none border-none" />
       
-      {data.title || 'NODO SENZA NOME'}
+      {/* Testo editabile anche nella vista ristretta (solo titolo) */}
+      <input 
+          type="text"
+          placeholder="SENZA TITOLO"
+          value={data.title || ''}
+          onChange={(e) => updateNodeData(id, { title: e.target.value })}
+          onMouseDown={(e) => e.stopPropagation()} 
+          className="text-[10px] font-bold uppercase tracking-widest text-center text-gray-900 bg-transparent outline-none w-full max-w-[120px] placeholder-gray-400"
+      />
       
       <Handle type="source" position={Position.Right} id="right" className="w-2 h-2 bg-gray-900 rounded-none border-none" />
       <Handle type="source" position={Position.Bottom} id="bottom" className="w-2 h-2 bg-gray-900 rounded-none border-none" />
@@ -80,13 +97,15 @@ export default function SemanticNode({ id, data }) {
   }
 
   // ---------------------------------------------------------
-  // RITORNO STANDARD (STATI 2 e 3)
-  // Se lo slider NON è su 4, il codice ignora il blocco sopra e disegna la card completa.
+  // RITORNO STANDARD E TESTUALE (STATI 'completa' e 'testuale')
+  // Qui la variabile showImage deciderà se montare o meno l'immagine.
   // ---------------------------------------------------------
+  
+  const showImage = viewMode === 'completa' && data.image;
+
   return (
-    <div className="bg-white border-2 border-gray-900 rounded-md p-4 w-72 shadow-[4px_4px_0px_0px_rgba(17,24,39,1)] transition-transform hover:-translate-y-1 hover:shadow-[6px_6px_0px_0px_rgba(17,24,39,1)] group relative">
+    <div className="bg-white border-2 border-gray-900 rounded-md p-4 w-72 shadow-[4px_4px_0px_0px_rgba(17,24,39,1)] transition-transform hover:-translate-y-1 hover:shadow-[6px_6px_0px_0px_rgba(17,24,39,1)] group relative cursor-grab active:cursor-grabbing">
       
-      {/* Bottone di Eliminazione Nodo (Hover) */}
       <button 
         onClick={() => removeNode(id)}
         className="absolute -top-3 -right-3 bg-red-500 text-white border-2 border-gray-900 rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 z-10"
@@ -104,18 +123,18 @@ export default function SemanticNode({ id, data }) {
           placeholder="SENZA TITOLO"
           value={data.title || ''}
           onChange={(e) => updateNodeData(id, { title: e.target.value })}
-          className="text-xs font-bold uppercase tracking-wider text-gray-900 border-b-2 border-transparent hover:border-gray-300 focus:border-gray-900 focus:outline-none bg-transparent w-full transition-colors placeholder-gray-300"
+          onMouseDown={(e) => e.stopPropagation()} 
+          className="text-xs font-bold uppercase tracking-wider text-gray-900 border-b-2 border-transparent hover:border-gray-300 focus:border-gray-900 focus:outline-none bg-transparent w-full transition-colors placeholder-gray-300 nodrag cursor-text"
         />
 
-        {data.image && (
+        {showImage && (
           <div className="relative w-full h-32 border-2 border-gray-900 overflow-hidden bg-white flex items-center justify-center group/image">
             <img 
               src={data.image} 
               alt="Rappresentazione semantica" 
-              className="object-cover w-full h-full mix-blend-multiply pixelated" 
+              className="object-cover w-full h-full mix-blend-multiply pixelated pointer-events-none" 
               style={{ imageRendering: 'pixelated' }}
             />
-            {/* Bottone Eliminazione Immagine (Hover sull'immagine) */}
             <button 
               onClick={() => updateNodeData(id, { image: null })}
               className="absolute top-2 right-2 bg-white border-2 border-gray-900 text-gray-900 text-[10px] font-bold px-2 py-1 opacity-0 group-hover/image:opacity-100 hover:bg-red-500 hover:text-white transition-all shadow-[2px_2px_0px_0px_rgba(17,24,39,1)] active:shadow-none active:translate-y-[2px] active:translate-x-[2px]"
@@ -125,19 +144,22 @@ export default function SemanticNode({ id, data }) {
           </div>
         )}
         
-        {/* Il Frammento ora è una Textarea editabile autoredimensionate */}
         <textarea 
           ref={textareaRef}
           value={data.label || ''}
           onChange={(e) => updateNodeData(id, { label: e.target.value })}
-          className="text-sm text-gray-800 font-medium leading-snug break-words bg-transparent resize-none focus:outline-none focus:ring-2 focus:ring-gray-900 p-1 -mx-1 rounded-sm w-full overflow-hidden transition-shadow"
-          rows={1} // Partiamo da 1 riga, si espanderà da sola
+          onMouseDown={(e) => e.stopPropagation()}
+          className="text-sm text-gray-800 font-medium leading-snug break-words bg-transparent resize-none focus:outline-none focus:ring-2 focus:ring-gray-900 p-1 -mx-1 rounded-sm w-full overflow-hidden transition-shadow nodrag cursor-text"
+          rows={1} 
         />
 
-        <label className="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-xs font-bold text-gray-500 hover:text-gray-900 flex items-center gap-1 mt-1">
-          <span>+ Allega Immagine</span>
-          <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-        </label>
+        {/* Mostriamo il bottone Allega Immagine solo se siamo in modalità Completa */}
+        {viewMode === 'completa' && (
+          <label className="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-xs font-bold text-gray-500 hover:text-gray-900 flex items-center gap-1 mt-1">
+            <span>+ Allega Immagine</span>
+            <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+          </label>
+        )}
       </div>
 
       <Handle type="source" position={Position.Right} id="right" className="w-3 h-3 bg-gray-900 border-none rounded-sm" />

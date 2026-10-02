@@ -1,40 +1,58 @@
 import React from 'react';
 import { useStore } from '../store/useStore';
+import { Type, PenTool, Square, Eraser, Book, Undo, Redo } from 'lucide-react';
 
 export default function ViewSlider() {
-  const viewMode = useStore((state) => state.viewMode);
-  const setViewMode = useStore((state) => state.setViewMode);
+  const activePanels = useStore((state) => state.activePanels) || [];
+  const togglePanel = useStore((state) => state.togglePanel);
+
+  const panels = [
+    { id: 'editor', label: 'Testo' },
+    { id: 'map', label: 'Nodi' },
+    { id: 'glossary', label: 'Glossario' }
+  ];
 
   return (
-    <div className="flex flex-col items-center justify-center py-4 bg-white border-b-2 border-gray-900 w-full z-50">
-      <div className="relative w-64 h-8 flex items-center">
-        {/* La linea orizzontale */}
-        <div className="absolute w-full h-[2px] bg-gray-900 top-1/2 -translate-y-1/2 z-0"></div>
+    <div className="flex items-center justify-between bg-gray-100 border-b-2 border-gray-900 shrink-0 min-h-[52px]">
+      
+      {/* SINISTRA: La Docking Station per la barra degli strumenti */}
+      <div id="global-toolbar-container" className="flex-1 flex items-center px-2 overflow-x-auto">
         
-        {/* I 4 stati generati dinamicamente */}
-        {[1, 2, 3, 4].map((step) => {
-          const isActive = viewMode === step;
-          return (
-            <button
-              key={step}
-              onClick={() => setViewMode(step)}
-              className={`absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 transition-all focus:outline-none 
-                ${isActive ? 'w-4 h-4 bg-white border-2 border-gray-900 rounded-none' : 'w-2 h-2 bg-gray-900 rounded-full hover:scale-150'}
-              `}
-              style={{ left: `${((step - 1) / 3) * 100}%` }}
-              title={`Modalità ${step}`}
-            />
-          );
-        })}
+        {/* Il fantasma della barra: appare disattivato quando chiudi l'editor */}
+        {!activePanels.includes('editor') && (
+          <div className="flex items-center gap-1 opacity-20 pointer-events-none grayscale min-w-max">
+            <button className="p-2"><Undo size={18} /></button>
+            <button className="p-2"><Redo size={18} /></button>
+            <div className="w-px h-6 bg-gray-400 mx-2"></div>
+            <button className="p-2"><Type size={18} /></button>
+            <button className="p-2"><PenTool size={18} /></button>
+            <div className="w-px h-6 bg-gray-400 mx-2"></div>
+            <button className="p-2"><Square size={18} /></button>
+            <button className="p-2"><Eraser size={18} /></button>
+            <div className="w-px h-6 bg-gray-400 mx-2"></div>
+            <button className="p-2"><Book size={18} /></button>
+          </div>
+        )}
+        
+      </div>
+
+      {/* DESTRA: I Toggle dei livelli */}
+      <div className="flex items-center gap-3 p-2 pr-4 shrink-0">
+        {panels.map((panel) => (
+          <button
+            key={panel.id}
+            onClick={() => togglePanel(panel.id)}
+            className={`px-4 py-1.5 border-2 border-gray-900 text-[10px] font-bold uppercase tracking-widest transition-all ${
+              activePanels.includes(panel.id)
+                ? 'bg-gray-900 text-white shadow-none translate-y-[2px] translate-x-[2px]'
+                : 'bg-white text-gray-900 shadow-[3px_3px_0px_0px_rgba(17,24,39,1)] hover:bg-gray-50 active:translate-y-[2px] active:translate-x-[2px] active:shadow-none'
+            }`}
+          >
+            {panel.label}
+          </button>
+        ))}
       </div>
       
-      {/* Etichette Brutaliste */}
-      <div className="flex justify-between w-64 mt-2 font-bold text-[10px] uppercase tracking-widest text-gray-900">
-        <span className={viewMode === 1 ? 'opacity-100' : 'opacity-30'}>Testo</span>
-        <span className={viewMode === 2 ? 'opacity-100' : 'opacity-30'}>Ibrido</span>
-        <span className={viewMode === 3 ? 'opacity-100' : 'opacity-30'}>Nodi</span>
-        <span className={viewMode === 4 ? 'opacity-100' : 'opacity-30'}>Sintesi</span>
-      </div>
     </div>
   );
 }
