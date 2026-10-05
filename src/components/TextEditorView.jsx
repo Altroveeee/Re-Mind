@@ -54,7 +54,6 @@ export default function TextEditorView() {
     const observer = new ResizeObserver((entries) => {
       const width = entries[0].contentRect.width;
       if (isFirstMeasure.current) {
-        // Inizializza i margini utente (a cui si sommerà la SAFE_ZONE)
         setMarginsData({ left: 40, right: 40, containerAtSet: width });
         isFirstMeasure.current = false;
       }
@@ -65,8 +64,8 @@ export default function TextEditorView() {
   }, []);
 
   // --- GLI AMMORTIZZATORI ELASTICI CON ZONA DI SICUREZZA ---
-  const SAFE_ZONE = 32; // I pixel intoccabili sui bordi
-  const MIN_TEXT = 150; // Larghezza minima vitale per il testo
+  const SAFE_ZONE = 32; 
+  const MIN_TEXT = 150; 
 
   const [marginsData, setMarginsData] = useState({ left: 40, right: 40, containerAtSet: 800 });
   
@@ -83,7 +82,6 @@ export default function TextEditorView() {
     effectiveRight = (marginsData.right / totalBaseMargins) * availableForExtraMargins;
   }
 
-  // Aggiungiamo il cemento armato ai margini
   const finalLeft = effectiveLeft + SAFE_ZONE;
   const finalRight = effectiveRight + SAFE_ZONE;
 
@@ -95,7 +93,6 @@ export default function TextEditorView() {
     const onMouseMove = (moveEvent) => {
       if (!containerRef.current) return;
       const rect = containerRef.current.getBoundingClientRect();
-      // Sottraggo la SAFE_ZONE perché il mouse muove solo il margine extra
       let newLeft = (moveEvent.clientX - rect.left) - SAFE_ZONE;
       const maxLeft = metricsRef.current.currentWidth - metricsRef.current.effectiveRight - (SAFE_ZONE * 2) - MIN_TEXT;
       newLeft = Math.max(0, Math.min(newLeft, maxLeft)); 
@@ -149,18 +146,29 @@ export default function TextEditorView() {
     },
     onUpdate: ({ editor }) => {
       setEditorContent(editor.getHTML());
+      
       const updates = {};
       const foundIdsInEditor = new Set();
+      const foundGlossaryIds = new Set();
+
       editor.state.doc.descendants((node) => {
         if (node.marks) {
-          const mark = node.marks.find(m => m.type.name === 'semanticMark');
-          if (mark) {
-            const id = mark.attrs.id;
+          const semanticMark = node.marks.find(m => m.type.name === 'semanticMark');
+          if (semanticMark) {
+            const id = semanticMark.attrs.id;
             updates[id] = (updates[id] || '') + (node.text || '');
             foundIdsInEditor.add(id);
           }
+          
+          // Tracciamo anche tutti gli ID del Glossario sopravvissuti nell'editor
+          const glossaryMark = node.marks.find(m => m.type.name === 'glossaryMark');
+          if (glossaryMark) {
+            foundGlossaryIds.add(glossaryMark.attrs.id);
+          }
         }
       });
+
+      // SINCRONIZZAZIONE NODI
       const currentNodesIds = new Set(useStore.getState().nodes.map(n => n.id));
       foundIdsInEditor.forEach(id => {
         if (!currentNodesIds.has(id)) {
@@ -169,9 +177,22 @@ export default function TextEditorView() {
       });
       currentNodesIds.forEach(id => { if (!foundIdsInEditor.has(id)) useStore.getState().removeNode(id); });
       syncNodeTexts(updates);
+
+      // SINCRONIZZAZIONE GLOSSARIO (La Bidirezionalità)
+      const removeGlossaryTerm = useStore.getState().removeGlossaryTerm;
+      if (removeGlossaryTerm) {
+        const currentGlossaryTerms = useStore.getState().glossaryTerms || [];
+        currentGlossaryTerms.forEach(term => {
+          // Se un termine esiste nello store ma non è più evidenziato nel testo, lo vaporizziamo
+          if (!foundGlossaryIds.has(term.id)) {
+            removeGlossaryTerm(term.id);
+          }
+        });
+      }
     },
   });
 
+  // Questo useEffect agisce in direzione opposta: se elimini il nodo o il glossario dal loro pannello, rimuove l'evidenziazione dal testo
   useEffect(() => {
     if (!editor) return;
     const currentNodesIds = new Set(nodes.map(n => n.id));
@@ -223,17 +244,24 @@ export default function TextEditorView() {
     const semanticMark = marks.find(m => m.type.name === 'semanticMark');
     if (semanticMark) {
       editor.chain().focus().unsetMark('semanticMark').run();
+      // Non è più strettamente necessario chiamare removeNode qui, onUpdate lo farà per noi, ma manteniamo la ridondanza per sicurezza
       removeNode(semanticMark.attrs.id);
     } else {
       editor.chain().focus().unsetMark('semanticMark').run();
     }
   };
 
-  const handleCreateGlossaryTerm = () => {
+  // Ora è un Toggle: Se la parola è già evidenziata, la spegne.
+  const handleToggleGlossaryTerm = () => {
+    if (editor.isActive('glossaryMark')) {
+      editor.chain().focus().unsetMark('glossaryMark').run();
+      return; 
+    }
     const { from, to } = editor.state.selection;
     if (from === to) return;
     const selectedText = editor.state.doc.textBetween(from, to, ' ').trim();
     if (!selectedText) return;
+    
     useStore.getState().addGlossaryTerm(selectedText);
     const term = useStore.getState().glossaryTerms.find(t => t.word === selectedText);
     if (term) editor.chain().focus().setMark('glossaryMark', { id: term.id }).run();
@@ -262,7 +290,13 @@ export default function TextEditorView() {
         <Eraser size={18} />
       </button>
       <div className="w-px h-6 bg-gray-400 mx-2 shrink-0"></div>
-      <button onClick={() => isEditorActive && handleCreateGlossaryTerm()} className={`p-2 border-2 border-transparent transition-all ${!isEditorActive ? 'opacity-30 grayscale cursor-not-allowed text-gray-900' : 'text-gray-900 hover:border-gray-900'}`} title="Aggiungi al Glossario">
+      
+      {/* Il bottone ora reagisce visivamente se sei sopra un termine del glossario e permette di spegnerlo */}
+      <button 
+        onClick={() => isEditorActive && handleToggleGlossaryTerm()} 
+        className={`p-2 border-2 border-transparent transition-all ${!isEditorActive ? 'opacity-30 grayscale cursor-not-allowed text-gray-900' : (editor.isActive('glossaryMark') ? 'bg-gray-900 text-white' : 'text-gray-900 hover:border-gray-900')}`} 
+        title="Aggiungi/Rimuovi dal Glossario"
+      >
         <Book size={18} />
       </button>
     </div>
