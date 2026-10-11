@@ -5,6 +5,8 @@ export default function GlossaryView() {
   const glossaryTerms = useStore((state) => state.glossaryTerms) || [];
   const updateGlossaryDefinition = useStore((state) => state.updateGlossaryDefinition);
   const removeGlossaryTerm = useStore((state) => state.removeGlossaryTerm);
+  const documents = useStore((state) => state.documents);
+  const docName = (id) => documents.find((d) => d.id === id)?.name;
 
   const sortedTerms = [...glossaryTerms].sort((a, b) => a.word.localeCompare(b.word));
 
@@ -24,6 +26,9 @@ export default function GlossaryView() {
                   <h3 className="font-bold text-xl text-gray-900 break-all break-words m-0">
                     {term.word}
                   </h3>
+                  {documents.length > 1 && docName(term.docId) && (
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mt-1">{docName(term.docId)}</div>
+                  )}
                 </div>
                 
                 <button

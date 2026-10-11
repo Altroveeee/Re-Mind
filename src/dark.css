@@ -1,0 +1,120 @@
+/* ==========================================================
+   MODALITÀ SCURA E MODALITÀ PERSONALIZZATE
+   - "dark"   sull'elemento <html>: modalità scura predefinita.
+   - "themed" sull'elemento <html>: modalità personalizzata; App.jsx imposta in linea
+     --ink, --paper, --canvas, --workspace, --map-bg, e da questi si ricava il resto.
+   Il design è monocromatico: inchiostro (testo, bordi) e carta (pannelli).
+   ========================================================== */
+:root {
+  --ink: #111827;     /* bordi, testo forte, riquadri */
+  --paper: #ffffff;   /* superfici dei pannelli */
+}
+
+html.dark {
+  --ink: #e5e7eb;
+  --paper: #1b1b1f;
+  --canvas: #141416;      /* sfondo app / barre */
+  --workspace: #0e0e10;   /* area dietro i pannelli */
+  --map-bg: #17171a;
+  --on-ink: #111827;      /* testo sopra superfici "inchiostro" */
+  --surface-50: #202024;
+  --hover: #26262b;
+  --muted: #52525b;
+  --text-strong: #f3f4f6;
+  --text-2: #e5e7eb;
+  --text-3: #d1d5db;
+  --text-4: #9ca3af;
+  --text-5: #6b7280;
+  --text-400: #9ca3af;
+  --border-soft: #3f3f46;
+  --placeholder: #6b7280;
+  color-scheme: dark; /* menu a tendina, barre di scorrimento, campi nativi */
+}
+
+/* Personalizzata: tutto ciò che non è scelto a mano si ricava da inchiostro e carta */
+html.themed {
+  --on-ink: var(--paper);
+  --surface-50: color-mix(in srgb, var(--paper) 96%, var(--ink));
+  --hover: color-mix(in srgb, var(--paper) 90%, var(--ink));
+  --muted: color-mix(in srgb, var(--paper) 70%, var(--ink));
+  --text-strong: var(--ink);
+  --text-2: color-mix(in srgb, var(--ink) 92%, var(--paper));
+  --text-3: color-mix(in srgb, var(--ink) 80%, var(--paper));
+  --text-4: color-mix(in srgb, var(--ink) 62%, var(--paper));
+  --text-5: color-mix(in srgb, var(--ink) 40%, var(--paper));
+  --text-400: color-mix(in srgb, var(--ink) 50%, var(--paper));
+  --border-soft: color-mix(in srgb, var(--ink) 22%, var(--paper));
+  --placeholder: color-mix(in srgb, var(--ink) 40%, var(--paper));
+}
+
+/* --- Sfondi --- */
+:is(.dark, .themed) .bg-white { background-color: var(--paper); }
+:is(.dark, .themed) .bg-gray-50 { background-color: var(--surface-50); }
+:is(.dark, .themed) .bg-gray-100 { background-color: var(--canvas); }
+:is(.dark, .themed) .bg-gray-200 { background-color: var(--workspace); }
+:is(.dark, .themed) .bg-gray-400 { background-color: var(--muted); }
+:is(.dark, .themed) .bg-gray-900 { background-color: var(--ink); }
+:is(.dark, .themed) .\!bg-gray-900 { background-color: var(--ink) !important; }
+:is(.dark, .themed) .bg-\[\#f4f4f4\] { background-color: var(--map-bg); }
+:is(.dark, .themed) .hover\:bg-gray-50:hover,
+:is(.dark, .themed) .hover\:bg-gray-100:hover { background-color: var(--hover); }
+:is(.dark, .themed) .hover\:bg-gray-900:hover,
+:is(.dark, .themed) .active\:bg-gray-900:active { background-color: var(--ink); }
+
+/* --- Testo --- */
+:is(.dark, .themed) .text-white,
+:is(.dark, .themed) .hover\:text-white:hover,
+:is(.dark, .themed) .active\:text-white:active { color: var(--on-ink); }
+:is(.dark, .themed) .text-gray-900,
+:is(.dark, .themed) .hover\:text-gray-900:hover { color: var(--text-strong); }
+:is(.dark, .themed) .text-gray-800 { color: var(--text-2); }
+:is(.dark, .themed) .text-gray-700 { color: var(--text-3); }
+:is(.dark, .themed) .text-gray-600,
+:is(.dark, .themed) .text-gray-500 { color: var(--text-4); }
+:is(.dark, .themed) .text-gray-400 { color: var(--text-400); }
+:is(.dark, .themed) .text-gray-300 { color: var(--text-5); }
+:is(.dark, .themed) .hover\:text-red-500:hover,
+:is(.dark, .themed) .hover\:text-red-600:hover { color: #f87171; }
+:is(.dark, .themed) input::placeholder,
+:is(.dark, .themed) textarea::placeholder { color: var(--placeholder); }
+
+/* --- Bordi, anelli --- */
+:is(.dark, .themed) .border-gray-900,
+:is(.dark, .themed) .hover\:border-gray-900:hover { border-color: var(--ink); }
+:is(.dark, .themed) .border-gray-300 { border-color: var(--border-soft); }
+:is(.dark, .themed) .border-t-gray-900 { border-top-color: var(--ink); }
+:is(.dark, .themed) .ring-gray-900 { --tw-ring-color: var(--ink); }
+:is(.dark, .themed) .ring-offset-2 { --tw-ring-offset-color: var(--paper); }
+
+/* --- Testo scritto nell'editor (plugin typography di Tailwind) --- */
+:is(.dark, .themed) .prose {
+  --tw-prose-body: var(--text-2);
+  --tw-prose-headings: var(--text-strong);
+  --tw-prose-lead: var(--text-3);
+  --tw-prose-links: var(--text-strong);
+  --tw-prose-bold: var(--text-strong);
+  --tw-prose-counters: var(--text-4);
+  --tw-prose-bullets: var(--text-4);
+  --tw-prose-hr: var(--border-soft);
+  --tw-prose-quotes: var(--text-strong);
+  --tw-prose-quote-borders: var(--border-soft);
+  --tw-prose-captions: var(--text-4);
+  --tw-prose-code: var(--text-strong);
+  --tw-prose-th-borders: var(--border-soft);
+  --tw-prose-td-borders: var(--border-soft);
+  color: var(--text-2);
+}
+
+/* --- Mappa (React Flow) --- */
+:is(.dark, .themed) .react-flow__controls-button {
+  background: var(--paper) !important;
+  color: var(--ink) !important;
+  border-bottom-color: var(--border-soft) !important;
+}
+:is(.dark, .themed) .react-flow__controls-button:hover { background: var(--hover) !important; }
+:is(.dark, .themed) .react-flow__controls-button svg,
+:is(.dark, .themed) .react-flow__controls-button svg path { fill: var(--ink) !important; }
+
+/* --- Carattere dell'interfaccia scelto in una modalità personalizzata --- */
+html.custom-font body,
+html.custom-font .font-sans { font-family: var(--ui-font); }

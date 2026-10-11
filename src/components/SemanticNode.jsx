@@ -2,7 +2,8 @@ import React, { useRef, useEffect, useState } from 'react';
 import { Handle, Position, useUpdateNodeInternals, useStore as useReactFlowStore } from 'reactflow';
 import { useStore } from '../store/useStore';
 import { useViewStore } from './SpatialMapView';
-import { RefreshCw, X } from 'lucide-react';
+import { X } from 'lucide-react';
+import { readableTextColor } from './nodeColors';
 
 //selezione nodi
 const SelectionBrackets = ({ selected }) => (
@@ -17,31 +18,33 @@ const SelectionBrackets = ({ selected }) => (
 // ==========================================
 // TERMINALI STATICI: Perno Centrale e Anti-Sovrascrittura
 // ==========================================
-const StaticHandle = ({ position, id, nodeId, isReceiving }) => {
+const StaticHandle = ({ position, id, nodeId, isReceiving, color, hidden }) => {
   const edges = useReactFlowStore((state) => state.edges);
-  
+
   const connectionNodeId = useReactFlowStore((state) => state.connectionNodeId);
   const connectionHandleId = useReactFlowStore((state) => state.connectionHandleId);
   const isConnectingFromHere = connectionNodeId === nodeId && connectionHandleId === id;
-  
+
   const isSourceConnected = edges.some(e => e.source === nodeId && e.sourceHandle === id);
   const isTargetConnected = edges.some(e => e.target === nodeId && e.targetHandle === id);
-  
+
   const isTriangle = isTargetConnected || isReceiving;
   const isConnected = isSourceConnected || isTargetConnected;
 
   const isVisibleForce = isConnected || isReceiving || isConnectingFromHere;
-  const visibilityClass = isVisibleForce ? '!opacity-100' : 'opacity-0 group-hover:opacity-100 hover:opacity-100';
+  const visibilityClass = hidden
+    ? '!opacity-0 !pointer-events-none'
+    : (isVisibleForce ? '!opacity-100' : 'opacity-0 group-hover:opacity-100 hover:opacity-100');
 
   let shapeClasses = "";
   let offsetStyle = {};
   let clipPath = undefined;
 
-  // !transform e origin-center costringono l'animazione hover:scale-125 
+  // !transform e origin-center costringono l'animazione hover:scale-125
   // a rispettare il baricentro esatto della forma, ignorando i CSS di default del framework.
   let transformClasses = "!transform origin-center hover:scale-125 transition-all duration-200 ";
-  
-  const baseClasses = "!bg-gray-900 z-50 cursor-crosshair absolute !border-none !rounded-none !outline-none focus:!outline-none !ring-0 !shadow-none !min-w-0 !min-h-0 after:content-[''] after:absolute after:-inset-4";
+
+  const baseClasses = `${color ? '' : '!bg-gray-900'} z-50 cursor-crosshair absolute !border-none !rounded-none !outline-none focus:!outline-none !ring-0 !shadow-none !min-w-0 !min-h-0 after:content-[''] after:absolute after:-inset-4`;
 
   if (position === Position.Top) {
     transformClasses += "-translate-x-1/2 translate-y-0";
@@ -67,29 +70,29 @@ const StaticHandle = ({ position, id, nodeId, isReceiving }) => {
     if (position === Position.Left) clipPath = 'polygon(0% 0%, 0% 100%, 100% 50%)';
     if (position === Position.Right) clipPath = 'polygon(100% 0%, 0% 50%, 100% 100%)';
   } else {
-      if (position === Position.Top || position === Position.Bottom) { 
-          shapeClasses = "!w-[14px] !h-[2px]"; 
-      } else { 
-          shapeClasses = "!w-[2px] !h-[14px]"; 
+      if (position === Position.Top || position === Position.Bottom) {
+          shapeClasses = "!w-[14px] !h-[2px]";
+      } else {
+          shapeClasses = "!w-[2px] !h-[14px]";
       }
     }
 
   return (
     <Handle
-      type="source" 
+      type="source"
       position={position}
       id={id}
       className={`${baseClasses} ${shapeClasses} ${visibilityClass} ${transformClasses}`}
-      style={{ ...offsetStyle, clipPath }}
+      style={{ ...offsetStyle, clipPath, backgroundColor: color || undefined }}
     />
   );
 };
 
 export default function SemanticNode({ id, data, dragging, selected, xPos, yPos }) {
   const updateNodeData = useStore((state) => state.updateNodeData);
-  const removeNode = useStore((state) => state.removeNode);
-  const viewMode = useViewStore((state) => state.viewMode); 
-  
+  const viewMode = useViewStore((state) => state.viewMode);
+  const imageMode = useViewStore((state) => state.imageMode);
+
   const updateNodeInternals = useUpdateNodeInternals();
   const textareaRef = useRef(null);
 
@@ -99,8 +102,11 @@ export default function SemanticNode({ id, data, dragging, selected, xPos, yPos 
   const [inputKey, setInputKey] = useState(Date.now());
   const [tilt, setTilt] = useState({ x: 0, z: 0 });
   const lastPos = useRef({ x: xPos, y: yPos });
-  
+
   const [isHovered, setIsHovered] = useState(false);
+
+  const nodeColor = data.color || null;
+  const headerTextColor = nodeColor ? readableTextColor(nodeColor) : undefined;
 
   useEffect(() => {
     let start = Date.now();
@@ -119,10 +125,10 @@ export default function SemanticNode({ id, data, dragging, selected, xPos, yPos 
     }
     const deltaX = xPos - (lastPos.current.x || xPos);
     const deltaY = yPos - (lastPos.current.y || yPos);
-    
+
     const tiltZ = Math.max(-6, Math.min(6, deltaX * 1.2));
-    const tiltX = Math.max(-6, Math.min(6, deltaY * -1.2)); 
-    
+    const tiltX = Math.max(-6, Math.min(6, deltaY * -1.2));
+
     setTilt({ x: tiltX, z: tiltZ });
     lastPos.current = { x: xPos, y: yPos };
 
@@ -134,14 +140,20 @@ export default function SemanticNode({ id, data, dragging, selected, xPos, yPos 
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-      updateNodeInternals(id); 
+      updateNodeInternals(id);
     }
   }, [data.label, id, updateNodeInternals]);
+
+  // Ricalcola le dimensioni del nodo quando cambia l'immagine o la modalità di visualizzazione
+  useEffect(() => {
+    const t = setTimeout(() => updateNodeInternals(id), 50);
+    return () => clearTimeout(t);
+  }, [imageMode, data.image, data.imageOriginal, id, updateNodeInternals]);
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
+
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
@@ -151,6 +163,11 @@ export default function SemanticNode({ id, data, dragging, selected, xPos, yPos 
         const scale = Math.min(300 / img.width, 1);
         canvas.width = img.width * scale; canvas.height = img.height * scale;
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+        // Versione a colori (ridimensionata): serve alle modalità "colorata" e "bianco e nero"
+        const imageOriginal = canvas.toDataURL('image/jpeg', 0.85);
+
+        // Versione "attuale": dithering a 1 bit
         const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const dataArr = pixels.data;
         for (let y = 0; y < canvas.height; y++) {
@@ -170,9 +187,9 @@ export default function SemanticNode({ id, data, dragging, selected, xPos, yPos 
           }
         }
         ctx.putImageData(pixels, 0, 0);
-        updateNodeData(id, { image: canvas.toDataURL('image/png') });
-        setInputKey(Date.now()); 
-        setTimeout(() => updateNodeInternals(id), 50); 
+        updateNodeData(id, { image: canvas.toDataURL('image/png'), imageOriginal });
+        setInputKey(Date.now());
+        setTimeout(() => updateNodeInternals(id), 50);
       };
       img.src = event.target.result;
     };
@@ -180,19 +197,19 @@ export default function SemanticNode({ id, data, dragging, selected, xPos, yPos 
   };
 
   const handleRemoveImage = (e) => {
-    e.stopPropagation(); 
-    updateNodeData(id, { image: null }); 
-    setInputKey(Date.now()); 
+    e.stopPropagation();
+    updateNodeData(id, { image: null, imageOriginal: null });
+    setInputKey(Date.now());
     setTimeout(() => updateNodeInternals(id), 50);
   };
 
   const kineticStyle = {
     transform: `perspective(800px) rotateX(${dragging ? tilt.x : 0}deg) rotateZ(${dragging ? tilt.z : 0}deg)`,
     transformOrigin: 'center center',
-    boxShadow: dragging 
-      ? `${6 + (tilt.z * -1.2)}px ${6 + (tilt.x * 1.2)}px 0px 0px rgba(17,24,39,1)`
-      : (isHovered ? '6px 6px 0px 0px rgba(17,24,39,1)' : '0px 0px 0px 0px rgba(17,24,39,1)'),
-    transition: dragging 
+    boxShadow: dragging
+      ? `${6 + (tilt.z * -1.2)}px ${6 + (tilt.x * 1.2)}px 0px 0px var(--ink)`
+      : (isHovered ? '6px 6px 0px 0px var(--ink)' : '0px 0px 0px 0px var(--ink)'),
+    transition: dragging
       ? 'transform 0.08s ease-out, box-shadow 0.08s ease-out'
       : 'transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease-out'
   };
@@ -205,102 +222,105 @@ export default function SemanticNode({ id, data, dragging, selected, xPos, yPos 
     return (
     <div className={outerWrapperClasses} onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}>
       <div className={elevationWrapperClasses}>
-        
-        <SelectionBrackets selected={selected} /> 
 
-        <StaticHandle position={Position.Top} id="top" nodeId={id} isReceiving={isReceiving} />
-        <StaticHandle position={Position.Left} id="left" nodeId={id} isReceiving={isReceiving} />
-        <StaticHandle position={Position.Right} id="right" nodeId={id} isReceiving={isReceiving} />
-        <StaticHandle position={Position.Bottom} id="bottom" nodeId={id} isReceiving={isReceiving} />
+        <SelectionBrackets selected={selected} />
 
-        <div className={`px-2 py-1.5 flex items-center justify-between ${innerCardClasses}`} style={kineticStyle}>
-          <input 
+        <StaticHandle position={Position.Top} id="top" nodeId={id} isReceiving={isReceiving} color={nodeColor} />
+        <StaticHandle position={Position.Left} id="left" nodeId={id} isReceiving={isReceiving} color={nodeColor} />
+        <StaticHandle position={Position.Right} id="right" nodeId={id} isReceiving={isReceiving} color={nodeColor} />
+        <StaticHandle position={Position.Bottom} id="bottom" nodeId={id} isReceiving={isReceiving} color={nodeColor} />
+
+        <div
+          className={`px-2 py-1.5 !flex-row items-center justify-between gap-2 ${innerCardClasses}`}
+          style={{ ...kineticStyle, backgroundColor: nodeColor || undefined }}
+        >
+          <input
               type="text"
               placeholder="SENZA TITOLO"
               value={data.title || ''}
               onChange={(e) => updateNodeData(id, { title: e.target.value })}
-              onMouseDown={(e) => e.stopPropagation()} 
+              onMouseDown={(e) => e.stopPropagation()}
               className="text-[10px] font-bold uppercase tracking-widest text-gray-900 bg-transparent outline-none w-full placeholder-gray-400 nodrag cursor-text relative z-30 min-w-0 text-left"
+              style={{ color: headerTextColor }}
           />
-          <button 
-              onClick={(e) => { e.stopPropagation(); removeNode(id); }} 
-              className="ml-2 text-gray-900 hover:text-red-600 transition-colors cursor-pointer nodrag flex-shrink-0 opacity-0 group-hover:opacity-100 relative z-40"
-          >
-            <X size={12} strokeWidth={3} />
-          </button>
         </div>
       </div>
     </div>
     );
   }
 
-  const showImage = viewMode === 'completa' && data.image;
+  const hasImage = !!(data.image || data.imageOriginal);
+  const showImage = viewMode === 'completa' && hasImage;
+  // "attuale" = dithering a 1 bit; "bn" e "colore" partono dall'originale (se assente, ripiegano sul dithering)
+  const imageSrc = imageMode === 'attuale'
+    ? (data.image || data.imageOriginal)
+    : (data.imageOriginal || data.image);
+  const imageFilter = imageMode === 'bn' ? 'grayscale(1) contrast(1.05)' : 'none';
 
   return (
     <div className={`rounded-md w-72 ${outerWrapperClasses}`} onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}>
       <div className={elevationWrapperClasses}>
 
-        <SelectionBrackets selected={selected} /> 
-        
-        <StaticHandle position={Position.Top} id="top" nodeId={id} isReceiving={isReceiving} />
-        <StaticHandle position={Position.Left} id="left" nodeId={id} isReceiving={isReceiving} />
-        <StaticHandle position={Position.Right} id="right" nodeId={id} isReceiving={isReceiving} />
-        <StaticHandle position={Position.Bottom} id="bottom" nodeId={id} isReceiving={isReceiving} />
+        <SelectionBrackets selected={selected} />
+
+        <StaticHandle position={Position.Top} id="top" nodeId={id} isReceiving={isReceiving} color={nodeColor} />
+        <StaticHandle position={Position.Left} id="left" nodeId={id} isReceiving={isReceiving} color={nodeColor} />
+        <StaticHandle position={Position.Right} id="right" nodeId={id} isReceiving={isReceiving} color={nodeColor} />
+        <StaticHandle position={Position.Bottom} id="bottom" nodeId={id} isReceiving={isReceiving} color={nodeColor} />
 
         <div className={`rounded-md ${innerCardClasses}`} style={kineticStyle}>
-          
-          {/* L'Intestazione (Header) con il separatore brutalista */}
-          <div className="flex items-center justify-between border-b-2 border-gray-900 px-3 py-2 bg-transparent relative z-30">
-            <input 
+
+          {/* L'Intestazione (Header): prende il colore del nodo */}
+          <div
+            className="flex items-center justify-between border-b-2 border-gray-900 px-3 py-2 bg-transparent relative z-30 rounded-t-[4px]"
+            style={{ backgroundColor: nodeColor || undefined }}
+          >
+            <input
               type="text"
               placeholder="SENZA TITOLO"
               value={data.title || ''}
               onChange={(e) => updateNodeData(id, { title: e.target.value })}
-              onMouseDown={(e) => e.stopPropagation()} 
+              onMouseDown={(e) => e.stopPropagation()}
               className="text-xs font-bold uppercase tracking-wider text-gray-900 bg-transparent w-full focus:outline-none placeholder-gray-300 nodrag cursor-text min-w-0"
+              style={{ color: headerTextColor }}
             />
-            <button 
-              onClick={(e) => { e.stopPropagation(); removeNode(id); }} 
-              className="ml-2 text-gray-900 hover:text-red-600 transition-colors cursor-pointer nodrag flex-shrink-0 opacity-0 group-hover:opacity-100"
-            >
-              <X size={14} strokeWidth={3} />
-            </button>
           </div>
 
-          {/* Il corpo del nodo (nota i padding adattati per compensare l'header) */}
+          {/* Il corpo del nodo */}
           <div className="flex flex-col gap-3 px-4 pb-4 pt-3 relative z-30">
 
             {showImage && (
-              <div className="flex items-center justify-between border-b-2 border-gray-900 px-3 py-2 bg-white relative z-30">
-            <input 
-              type="text"
-              placeholder="SENZA TITOLO"
-              value={data.title || ''}
-              onChange={(e) => updateNodeData(id, { title: e.target.value })}
-              onMouseDown={(e) => e.stopPropagation()} 
-              className="text-xs font-bold uppercase tracking-wider text-gray-900 bg-transparent w-full focus:outline-none placeholder-gray-300 nodrag cursor-text min-w-0"
-            />
-            <button 
-              onClick={(e) => { e.stopPropagation(); removeNode(id); }} 
-              className="ml-2 text-gray-900 hover:text-red-600 transition-colors cursor-pointer nodrag flex-shrink-0 opacity-0 group-hover:opacity-100"
-            >
-              <X size={14} strokeWidth={3} />
-            </button>
-          </div>
+              <div className="relative border-2 border-gray-900 bg-white nodrag">
+                <img
+                  src={imageSrc}
+                  alt=""
+                  draggable={false}
+                  className="block w-full h-auto"
+                  style={{ filter: imageFilter }}
+                  onLoad={() => updateNodeInternals(id)}
+                />
+                <button
+                  onClick={handleRemoveImage}
+                  title="Rimuovi immagine"
+                  className="absolute top-1 right-1 p-0.5 bg-white border-2 border-gray-900 text-gray-900 hover:text-red-600 cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <X size={12} strokeWidth={3} />
+                </button>
+              </div>
             )}
-            
-            <textarea 
+
+            <textarea
               ref={textareaRef}
               value={data.label || ''}
               onChange={(e) => updateNodeData(id, { label: e.target.value })}
               onMouseDown={(e) => e.stopPropagation()}
               className="text-sm text-gray-800 font-medium leading-snug break-words bg-transparent resize-none focus:outline-none focus:ring-2 focus:ring-gray-900 p-1 -mx-1 rounded-sm w-full overflow-hidden transition-shadow nodrag cursor-text"
-              rows={1} 
+              rows={1}
             />
 
             {viewMode === 'completa' && (
               <label className="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer text-xs font-bold text-gray-500 hover:text-gray-900 flex items-center gap-1 mt-1 nodrag">
-                <span>+ Allega Immagine</span>
+                <span>{hasImage ? '+ Sostituisci Immagine' : '+ Allega Immagine'}</span>
                 <input key={`add-${inputKey}`} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
               </label>
             )}
