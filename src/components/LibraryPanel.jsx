@@ -22,8 +22,13 @@ export default function LibraryPanel({ onImportClick, width = 220 }) {
   const renameDocument = useStore((s) => s.renameDocument);
   const removeDocument = useStore((s) => s.removeDocument);
   const setDocumentColor = useStore((s) => s.setDocumentColor);
+  const moveDocument = useStore((s) => s.moveDocument);
   const paletteColors = useNodeColors();
+  const [dragId, setDragId] = useState(null); // testo che si sta trascinando
+  const [overId, setOverId] = useState(null); // testo su cui è sopra il mouse
   const [editing, setEditing] = useState(null); // 'p:<id>' | 'd:<id>'
+  // Cosa è "selezionato" nell'elenco: il quaderno oppure uno dei suoi testi (uno solo alla volta)
+  const [focus, setFocus] = useState('doc'); // 'project' | 'doc'
   const [palette, setPalette] = useState(null); // 'p:<id>' | 'd:<id>': riga con la tavolozza aperta
 
   const projectNodeCount = (p) => (p.id === activeProjectId ? nodes.length : (p.nodes || []).length);
@@ -102,6 +107,14 @@ export default function LibraryPanel({ onImportClick, width = 220 }) {
 
   return (
     <aside style={{ width }} className="shrink-0 h-full bg-white flex flex-col overflow-hidden">
+      <style>{`
+        @keyframes lib-drop {
+          from { transform: translateY(calc(-100% * var(--n))); }
+          to { transform: translateY(0); }
+        }
+        .lib-drop { animation: lib-drop 0.32s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+        @media (prefers-reduced-motion: reduce) { .lib-drop { animation: none; } }
+      `}</style>
       <div className="px-3 py-2 border-b-2 border-gray-900 text-[9px] font-bold uppercase tracking-widest text-gray-900">Quaderni</div>
 
       <div className="flex gap-1 p-2 border-b-2 border-gray-900">
@@ -120,9 +133,9 @@ export default function LibraryPanel({ onImportClick, width = 220 }) {
           return (
             <div key={p.id} className="border-b-2 border-gray-900">
               <div
-                onClick={() => setActiveProject(p.id)}
+                onClick={() => { setActiveProject(p.id); setFocus('project'); }}
                 onDoubleClick={() => setEditing('p:' + p.id)}
-                className={`group flex items-center justify-between gap-2 px-3 py-2 cursor-pointer text-xs font-bold border-l-[6px] ${active ? 'border-gray-900' : 'border-transparent'} ${pc ? '' : (active ? 'bg-gray-900 text-white' : 'text-gray-900 hover:bg-gray-100')}`}
+                className={`group flex items-center justify-between gap-2 px-3 py-2 cursor-pointer text-xs font-bold ${active ? 'border-b-2 border-gray-900' : ''} ${pc ? '' : (active && focus === 'project' ? 'bg-gray-900 text-white' : 'text-gray-900 hover:bg-gray-100')}`}
                 style={pc ? { backgroundColor: pc, color: readableTextColor(pc) } : undefined}
                 title="Doppio clic per rinominare"
               >
@@ -131,7 +144,7 @@ export default function LibraryPanel({ onImportClick, width = 220 }) {
                   : <span className="truncate">{p.name}</span>}
                 <span className="flex items-center gap-2 shrink-0">
                   {colorDot('p:' + p.id, pc)}
-                  <span className={`text-[10px] ${pc ? 'opacity-60' : (active ? 'text-gray-300' : 'text-gray-400')}`}>{projectNodeCount(p)}</span>
+                  <span className={`text-[10px] ${pc ? 'opacity-60' : (active && focus === 'project' ? 'text-gray-300' : 'text-gray-400')}`}>{projectNodeCount(p)}</span>
                   {projects.length > 1 && (
                     <button onClick={(e) => handleDeleteProject(e, p)} className="opacity-0 group-hover:opacity-100 px-1 font-bold hover:text-red-500" title="Elimina quaderno">✕</button>
                   )}
@@ -140,16 +153,36 @@ export default function LibraryPanel({ onImportClick, width = 220 }) {
               {palettePicker('p:' + p.id, pc, (c) => setProjectColor(p.id, c))}
 
               {active && (
-                <div className="bg-white">
-                  {documents.map((doc) => {
-                    const isDoc = doc.id === activeDocId;
+                <div className="bg-white overflow-hidden border-l-4 border-gray-900">
+                  {documents.map((doc, i) => {
+                    const isDoc = doc.id === activeDocId && focus === 'doc';
                     const dc = doc.color || null;
                     return (
-                      <div key={doc.id}>
+                      <div
+                        key={doc.id}
+                        className={`lib-drop relative bg-white border-b-2 border-gray-900 ${dragId === doc.id ? 'opacity-40' : ''}`}
+                        style={{ '--n': i + 1, zIndex: documents.length - i, animationDelay: `${i * 90}ms` }}
+                        draggable={editing !== 'd:' + doc.id}
+                        onDragStart={(e) => { setDragId(doc.id); e.dataTransfer.effectAllowed = 'move'; }}
+                        onDragOver={(e) => { if (dragId) { e.preventDefault(); setOverId(doc.id); } }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (dragId && dragId !== doc.id) moveDocument(dragId, i);
+                          setDragId(null); setOverId(null);
+                        }}
+                        onDragEnd={() => { setDragId(null); setOverId(null); }}
+                      >
+                        {/* Linea che mostra dove cadrà il testo */}
+                        {overId === doc.id && dragId && dragId !== doc.id && (
+                          <div
+                            className="absolute left-0 right-0 h-[3px] bg-gray-900 z-20 pointer-events-none"
+                            style={documents.findIndex((d) => d.id === dragId) < i ? { bottom: 0 } : { top: 0 }}
+                          />
+                        )}
                         <div
-                          onClick={() => setActiveDoc(doc.id)}
+                          onClick={() => { setActiveDoc(doc.id); setFocus('doc'); }}
                           onDoubleClick={() => setEditing('d:' + doc.id)}
-                          className={`group flex items-center justify-between gap-2 pl-6 pr-3 py-1.5 cursor-pointer text-[11px] font-semibold border-l-4 ${isDoc ? 'border-gray-900' : 'border-transparent'} ${dc ? '' : (isDoc ? 'bg-gray-100 text-gray-900' : 'text-gray-600 hover:bg-gray-50')}`}
+                          className={`group flex items-center justify-between gap-2 pl-6 pr-3 py-1.5 cursor-pointer text-[11px] font-semibold ${isDoc && dc ? 'shadow-[inset_6px_0_0_0_var(--ink)]' : ''} ${dc ? '' : (isDoc ? 'bg-gray-900 text-white' : 'text-gray-900 hover:bg-gray-100')}`}
                           style={dc ? { backgroundColor: dc, color: readableTextColor(dc) } : undefined}
                           title="Doppio clic per rinominare"
                         >
@@ -158,7 +191,7 @@ export default function LibraryPanel({ onImportClick, width = 220 }) {
                             : <span className="truncate">{doc.name}</span>}
                           <span className="flex items-center gap-2 shrink-0">
                             {colorDot('d:' + doc.id, dc)}
-                            {docNodeCount(doc.id) > 0 && <span className={`text-[10px] ${dc ? 'opacity-60' : 'text-gray-400'}`}>{docNodeCount(doc.id)}</span>}
+                            {docNodeCount(doc.id) > 0 && <span className={`text-[10px] ${dc ? 'opacity-60' : (isDoc ? 'text-gray-300' : 'text-gray-400')}`}>{docNodeCount(doc.id)}</span>}
                             {documents.length > 1 && (
                               <button onClick={(e) => handleDeleteDoc(e, doc)} className="opacity-0 group-hover:opacity-100 px-1 font-bold hover:text-red-500" title="Elimina testo">✕</button>
                             )}
@@ -170,7 +203,8 @@ export default function LibraryPanel({ onImportClick, width = 220 }) {
                   })}
                   <button
                     onClick={() => addDocument({ name: `Testo ${documents.length + 1}`, content: '<p></p>' })}
-                    className="w-full text-left pl-6 pr-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:text-gray-900"
+                    className="lib-drop relative bg-white w-full text-left pl-6 pr-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-gray-400 hover:text-gray-900"
+                    style={{ '--n': documents.length + 1, zIndex: 0, animationDelay: `${documents.length * 90}ms` }}
                   >
                     + Nuovo testo
                   </button>

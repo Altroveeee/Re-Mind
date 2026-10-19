@@ -2,7 +2,10 @@ import { Mark, mergeAttributes } from '@tiptap/core';
 
 export const SemanticMark = Mark.create({
   name: 'semanticMark',
-  
+
+  // Pezzi di testo adiacenti con lo stesso riquadro (es. prima / grassetto / dopo) restano un unico span
+  spanning: true,
+
   addAttributes() {
     return { id: { default: null } };
   },

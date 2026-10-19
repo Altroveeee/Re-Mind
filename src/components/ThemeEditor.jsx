@@ -1,7 +1,7 @@
 import React from 'react';
 import { X } from 'lucide-react';
 import { useStore } from '../store/useStore';
-import { mixHex } from './nodeColors';
+import { mixHex, LIGHT_THEME } from './nodeColors';
 import FontPicker from './FontPicker';
 
 const FIELDS = [
@@ -13,10 +13,21 @@ const FIELDS = [
   { key: 'dots', label: 'Puntini di sfondo' },
 ];
 
-const ColorField = ({ label, value, onChange }) => (
+// onReset: se presente (colore modificato) compare il pulsante per riportarlo al valore di partenza
+const ColorField = ({ label, value, onChange, onReset }) => (
   <label className="flex items-center justify-between gap-3 py-1.5 text-xs font-semibold text-gray-900 cursor-pointer">
     <span className="truncate">{label}</span>
     <span className="flex items-center gap-2 shrink-0">
+      {onReset && (
+        <button
+          type="button"
+          onClick={(e) => { e.preventDefault(); onReset(); }}
+          className="px-1 text-[13px] leading-none font-bold text-gray-900 hover:bg-gray-900 hover:text-white"
+          title="Ripristina questo colore"
+        >
+          ↺
+        </button>
+      )}
       <span className="text-[10px] font-mono uppercase text-gray-500">{value}</span>
       <input
         type="color"
@@ -28,19 +39,51 @@ const ColorField = ({ label, value, onChange }) => (
   </label>
 );
 
-const SectionTitle = ({ children }) => (
-  <div className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mt-3 mb-1">{children}</div>
+// onReset: pulsante "Ripristina" della sezione (disattivato se non c'è nulla da ripristinare)
+const SectionTitle = ({ children, onReset, canReset }) => (
+  <div className="flex items-center justify-between mt-3 mb-1">
+    <div className="text-[9px] font-bold uppercase tracking-widest text-gray-500">{children}</div>
+    {onReset && (
+      <button
+        type="button"
+        onClick={onReset}
+        disabled={!canReset}
+        className={`px-2 py-0.5 border-2 border-gray-900 text-[9px] font-bold uppercase tracking-widest text-gray-900 ${canReset ? 'hover:bg-gray-900 hover:text-white' : 'opacity-30 cursor-not-allowed'}`}
+        title="Riporta questi colori ai valori di partenza"
+      >
+        Ripristina
+      </button>
+    )}
+  </div>
 );
+
+const same = (a, b) => String(a || '').toLowerCase() === String(b || '').toLowerCase();
 
 // Pannello quadrato (senza ombra) al centro dello schermo: le modifiche si vedono subito.
 export default function ThemeEditor({ id, onClose }) {
   const theme = useStore((s) => (s.customThemes || []).find((t) => t.id === id));
   const updateCustomTheme = useStore((s) => s.updateCustomTheme);
   const removeCustomTheme = useStore((s) => s.removeCustomTheme);
+  const resetCustomThemeColors = useStore((s) => s.resetCustomThemeColors);
   if (!theme) return null;
 
   const setNodeColor = (i, value) =>
     updateCustomTheme(id, { nodeColors: theme.nodeColors.map((c, j) => (j === i ? { ...c, value } : c)) });
+
+  // Valori di partenza della modalità (se manca la copia salvata: quelli del tema chiaro)
+  const defaultOf = (key) => theme.defaults?.[key] ?? LIGHT_THEME[key];
+  const currentOf = (key) => theme[key] || (key === 'dots' ? mixHex(theme.ink, theme.mapBg, 0.5) : '#000000');
+  const defaultNodeColors = theme.defaults?.nodeColors || LIGHT_THEME.nodeColors;
+
+  const changedFields = FIELDS.filter((f) => !same(currentOf(f.key), defaultOf(f.key)));
+  const nodeChanged = (i) => !same(theme.nodeColors[i]?.value, defaultNodeColors[i]?.value);
+  const anyNodeChanged = theme.nodeColors.some((_, i) => nodeChanged(i));
+
+  const resetInterface = () => {
+    const patch = {};
+    FIELDS.forEach((f) => { patch[f.key] = defaultOf(f.key); });
+    updateCustomTheme(id, patch);
+  };
 
   const handleDelete = () => {
     if (!window.confirm(`Eliminare la modalità «${theme.name}»?`)) return;
@@ -69,13 +112,14 @@ export default function ThemeEditor({ id, onClose }) {
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 pb-3">
-          <SectionTitle>Interfaccia</SectionTitle>
+          <SectionTitle onReset={resetInterface} canReset={changedFields.length > 0}>Interfaccia</SectionTitle>
           {FIELDS.map((f) => (
             <ColorField
               key={f.key}
               label={f.label}
-              value={theme[f.key] || (f.key === 'dots' ? mixHex(theme.ink, theme.mapBg, 0.5) : '#000000')}
+              value={currentOf(f.key)}
               onChange={(v) => updateCustomTheme(id, { [f.key]: v })}
+              onReset={same(currentOf(f.key), defaultOf(f.key)) ? undefined : () => updateCustomTheme(id, { [f.key]: defaultOf(f.key) })}
             />
           ))}
 
@@ -90,9 +134,15 @@ export default function ThemeEditor({ id, onClose }) {
             />
           </div>
 
-          <SectionTitle>Colori dei nodi</SectionTitle>
+          <SectionTitle onReset={() => resetCustomThemeColors(id)} canReset={anyNodeChanged}>Colori dei nodi</SectionTitle>
           {theme.nodeColors.map((c, i) => (
-            <ColorField key={i} label={c.name} value={c.value} onChange={(v) => setNodeColor(i, v)} />
+            <ColorField
+              key={i}
+              label={c.name}
+              value={c.value}
+              onChange={(v) => setNodeColor(i, v)}
+              onReset={nodeChanged(i) ? () => resetCustomThemeColors(id, i) : undefined}
+            />
           ))}
         </div>
 

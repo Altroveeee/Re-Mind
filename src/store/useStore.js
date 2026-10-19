@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { applyNodeChanges, applyEdgeChanges, addEdge } from 'reactflow';
 import { LIGHT_THEME, resolveTheme, mixHex } from '../components/nodeColors';
+import { deleteRecording, embedRecordings, extractRecordings } from '../components/recordingStorage';
 
 // ==========================================
 // ARCHIVIAZIONE LOCALE: IndexedDB (con ripiego su localStorage).
@@ -153,6 +154,28 @@ export function exportablePackage(state) {
   };
 }
 
+// Come exportablePackage, ma con le registrazioni audio incorporate (il pacchetto diventa più pesante)
+export async function exportablePackageWithAudio(state) {
+  const pkg = exportablePackage(state);
+  return { ...pkg, projects: await embedRecordings(pkg.projects) };
+}
+
+// Nodi cancellati: si conservano (con i collegamenti) per poterli ripristinare se il riquadro torna nel testo (Annulla).
+// I collegamenti possono essere già stati tolti da React Flow un attimo prima del nodo: si tengono anche quelli appena rimossi.
+const RECENT_EDGES_MS = 400;
+function stashNodes(state, ids) {
+  const out = { ...state.removedNodes };
+  const recent = state.lastRemovedEdges && Date.now() - state.lastRemovedEdges.t < RECENT_EDGES_MS ? state.lastRemovedEdges.edges : [];
+  ids.forEach((id) => {
+    const gone = state.nodes.find((n) => n.id === id);
+    if (!gone) return;
+    const seen = new Set();
+    const edges = [...state.edges, ...recent].filter((e) => (e.source === id || e.target === id) && !seen.has(e.id) && seen.add(e.id));
+    out[id] = { node: gone, edges };
+  });
+  return out;
+}
+
 export const useStore = create(
   persist(
     (set, get) => ({
@@ -195,6 +218,12 @@ export const useStore = create(
           ink: base.ink, paper: base.paper, canvas: base.canvas, workspace: base.workspace, mapBg: base.mapBg,
           dots: base.dots || mixHex(base.ink, base.mapBg, 0.5), font: base.font || '',
           nodeColors: base.nodeColors.map((c) => ({ ...c })),
+          // Copia dei colori di partenza: serve a poterli ripristinare
+          defaults: {
+            ink: base.ink, paper: base.paper, canvas: base.canvas, workspace: base.workspace, mapBg: base.mapBg,
+            dots: base.dots || mixHex(base.ink, base.mapBg, 0.5),
+            nodeColors: base.nodeColors.map((c) => ({ ...c })),
+          },
         };
         set((s) => ({ customThemes: [...s.customThemes, theme] }));
         get().setTheme(id);
@@ -207,6 +236,19 @@ export const useStore = create(
         const extra = patch.nodeColors && state.theme === id ? remapNodeColors(state, t.nodeColors, next.nodeColors) : {};
         return { customThemes: state.customThemes.map((x) => (x.id === id ? next : x)), ...extra };
       }),
+      // Ripristina i colori dei nodi ai valori di partenza della modalità (index = un solo colore, altrimenti tutti).
+      // I nodi già colorati seguono la palette, come per ogni modifica di colore.
+      resetCustomThemeColors: (id, index) => {
+        const t = get().customThemes.find((x) => x.id === id);
+        if (!t) return;
+        const base = t.defaults?.nodeColors || LIGHT_THEME.nodeColors;
+        const nodeColors = t.nodeColors.map((c, i) => {
+          if (index !== undefined && index !== i) return c;
+          const orig = base[i];
+          return orig ? { ...c, value: orig.value } : c;
+        });
+        get().updateCustomTheme(id, { nodeColors });
+      },
       removeCustomTheme: (id) => set((state) => {
         const customThemes = state.customThemes.filter((t) => t.id !== id);
         if (state.theme !== id) return { customThemes };
@@ -229,14 +271,14 @@ export const useStore = create(
       addProject: (name) => set((state) => {
         const projects = syncedProjects(state);
         const fresh = emptyProject(name || `Quaderno ${projects.length + 1}`);
-        return { projects: [...projects, fresh], activeProjectId: fresh.id, ...snapshotOf(fresh), epoch: state.epoch + 1 };
+        return { projects: [...projects, fresh], activeProjectId: fresh.id, ...snapshotOf(fresh), removedNodes: {}, epoch: state.epoch + 1 };
       }),
 
       setActiveProject: (id) => set((state) => {
         if (id === state.activeProjectId) return state;
         const target = state.projects.find((p) => p.id === id);
         if (!target) return state;
-        return { projects: syncedProjects(state), activeProjectId: id, ...snapshotOf(target), epoch: state.epoch + 1 };
+        return { projects: syncedProjects(state), activeProjectId: id, ...snapshotOf(target), removedNodes: {}, epoch: state.epoch + 1 };
       }),
 
       renameProject: (id, name) => set((state) => ({
@@ -249,6 +291,11 @@ export const useStore = create(
       })),
       setDocumentColor: (id, color) => set((state) => ({
         documents: state.documents.map((d) => (d.id === id ? { ...d, color: color || null } : d)),
+      })),
+
+      // Registrazione audio del testo (solo i metadati: audio e istantanee stanno in IndexedDB, vedi recordingStorage)
+      setDocumentRecording: (id, recording) => set((state) => ({
+        documents: state.documents.map((d) => (d.id === id ? { ...d, recording: recording || null } : d)),
       })),
 
       removeProject: (id) => set((state) => {
@@ -300,6 +347,16 @@ export const useStore = create(
         sources: { ...state.sources, [id]: name },
       })),
 
+      // Sposta un testo: prende il posto della riga su cui viene rilasciato
+      moveDocument: (id, toIndex) => set((state) => {
+        const from = state.documents.findIndex((d) => d.id === id);
+        if (from < 0 || from === toIndex) return state;
+        const documents = [...state.documents];
+        const [moved] = documents.splice(from, 1);
+        documents.splice(Math.max(0, Math.min(toIndex, documents.length)), 0, moved);
+        return { documents };
+      }),
+
       updateDocumentContent: (id, content) => set((state) => ({
         documents: state.documents.map((d) => (d.id === id ? { ...d, content } : d)),
       })),
@@ -307,6 +364,8 @@ export const useStore = create(
       // Elimina il documento con i suoi nodi, collegamenti e termini di glossario.
       removeDocument: (id) => set((state) => {
         if (state.documents.length <= 1) return state;
+        const goneDoc = state.documents.find((d) => d.id === id);
+        if (goneDoc?.recording) deleteRecording(goneDoc.recording.id);
         const documents = state.documents.filter((d) => d.id !== id);
         const goneNodeIds = new Set(state.nodes.filter((n) => n.data?.docId === id).map((n) => n.id));
         const sources = { ...state.sources };
@@ -322,7 +381,11 @@ export const useStore = create(
       }),
 
       // Sostituisce tutto il lavoro con quello di un pacchetto .remind (o di un vecchio JSON)
-      loadPackage: (raw) => set((state) => ({ ...normalizeRoot(raw), epoch: state.epoch + 1 })),
+      // Le registrazioni audio incorporate vengono prima rimesse in IndexedDB, poi si carica il resto.
+      loadPackage: async (raw) => {
+        const light = await extractRecordings(raw);
+        set((state) => ({ ...normalizeRoot(light), removedNodes: {}, epoch: state.epoch + 1 }));
+      },
 
       // --- IL GLOSSARIO INDIPENDENTE ---
       glossaryTerms: [],
@@ -336,9 +399,24 @@ export const useStore = create(
       updateGlossaryDefinition: (id, definition) => set((state) => ({
         glossaryTerms: state.glossaryTerms.map((t) => (t.id === id ? { ...t, definition } : t)),
       })),
+      // Aggiorna campi qualsiasi di un termine (es. image / imageOriginal)
+      updateGlossaryTerm: (id, patch) => set((state) => ({
+        glossaryTerms: state.glossaryTerms.map((t) => (t.id === id ? { ...t, ...patch } : t)),
+      })),
       removeGlossaryTerm: (id) => set((state) => ({
         glossaryTerms: state.glossaryTerms.filter((t) => t.id !== id),
+        selectedTermId: state.selectedTermId === id ? null : state.selectedTermId,
       })),
+      // Scheda del glossario selezionata (come i nodi: prima si seleziona, poi si preme la X)
+      selectedTermId: null,
+      setSelectedTermId: (id) => set({ selectedTermId: id }),
+      // Elimina la scheda selezionata; restituisce true se ha eliminato qualcosa
+      removeSelectedTerm: () => {
+        const id = get().selectedTermId;
+        if (!id) return false;
+        get().removeGlossaryTerm(id);
+        return true;
+      },
 
       showHighlights: true,
       toggleHighlights: () => set((state) => ({ showHighlights: !state.showHighlights })),
@@ -348,9 +426,24 @@ export const useStore = create(
       edges: [],
 
       // 4. LOGICA DI MUTAZIONE NODI
-      addNode: (node) => set((state) => ({
-        nodes: [...state.nodes, { ...node, data: { ...node.data, docId: node.data?.docId || state.activeDocId } }],
-      })),
+      // Nodi cancellati (con i loro collegamenti): se il riquadro torna (es. annulla nell'editor)
+      // con lo stesso id, il nodo riprende colore, titolo, immagine, posizione e collegamenti.
+      removedNodes: {},
+      lastRemovedEdges: null,
+
+      addNode: (node) => set((state) => {
+        const old = state.removedNodes[node.id];
+        const { [node.id]: _used, ...restRemoved } = state.removedNodes;
+        const merged = old
+          ? { ...node, position: old.node.position, data: { ...old.node.data, ...node.data, color: node.data?.color ?? old.node.data?.color } }
+          : node;
+        const edgesBack = old ? old.edges.filter((e) => !state.edges.some((x) => x.id === e.id)) : [];
+        return {
+          removedNodes: restRemoved,
+          nodes: [...state.nodes, { ...merged, data: { ...merged.data, docId: merged.data?.docId || state.activeDocId } }],
+          edges: edgesBack.length ? [...state.edges, ...edgesBack] : state.edges,
+        };
+      }),
 
       updateNodeData: (nodeId, newData) => set((state) => ({
         nodes: state.nodes.map((node) =>
@@ -359,6 +452,7 @@ export const useStore = create(
       })),
 
       removeNode: (nodeId) => set((state) => ({
+        removedNodes: stashNodes(state, [nodeId]),
         nodes: state.nodes.filter((node) => node.id !== nodeId),
         edges: state.edges.filter((edge) => edge.source !== nodeId && edge.target !== nodeId),
       })),
@@ -372,15 +466,34 @@ export const useStore = create(
       })),
 
       // 5. MOTORE MATEMATICO REACT FLOW
-      onNodesChange: (changes) => set({ nodes: applyNodeChanges(changes, get().nodes) }),
-      onEdgesChange: (changes) => set({ edges: applyEdgeChanges(changes, get().edges) }),
+      // Cancellazione dalla mappa (Backspace/Canc): si conserva il nodo prima di toglierlo
+      onNodesChange: (changes) => set((state) => {
+        const ids = changes.filter((c) => c.type === 'remove').map((c) => c.id);
+        return {
+          nodes: applyNodeChanges(changes, state.nodes),
+          removedNodes: ids.length ? stashNodes(state, ids) : state.removedNodes,
+        };
+      }),
+      // Dati di un collegamento (etichetta, tratteggio...)
+      updateEdgeData: (edgeId, patch) => set((state) => ({
+        edges: state.edges.map((e) => (e.id === edgeId ? { ...e, data: { ...e.data, ...patch } } : e)),
+      })),
+      onEdgesChange: (changes) => set((state) => {
+        const goneIds = new Set(changes.filter((c) => c.type === 'remove').map((c) => c.id));
+        return {
+          edges: applyEdgeChanges(changes, state.edges),
+          lastRemovedEdges: goneIds.size
+            ? { t: Date.now(), edges: state.edges.filter((e) => goneIds.has(e.id)) }
+            : state.lastRemovedEdges,
+        };
+      }),
       onConnect: (connection) => set({ edges: addEdge(connection, get().edges) }),
     }),
     {
       name: 'remind-knowledge-base',
       storage: createJSONStorage(() => idbStorage),
       // Si salva sempre l'elenco dei quaderni aggiornato; `epoch` non serve salvarlo.
-      partialize: (state) => { const { epoch, ...rest } = state; return { ...rest, projects: syncedProjects(state) }; },
+      partialize: (state) => { const { epoch, selectedTermId, removedNodes, lastRemovedEdges, ...rest } = state; return { ...rest, projects: syncedProjects(state) }; },
       merge: (persisted, current) => (persisted ? { ...current, ...persisted, ...normalizeRoot(persisted) } : current),
     }
   )

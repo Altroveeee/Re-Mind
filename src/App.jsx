@@ -4,10 +4,11 @@ import SpatialMapView, { useViewStore } from './components/SpatialMapView';
 import GlossaryView from './components/GlossaryView';
 import LibraryPanel from './components/LibraryPanel';
 import ThemeEditor from './components/ThemeEditor';
+import ExportDialog from './components/ExportDialog';
 import { readableTextColor } from './components/nodeColors';
 import './dark.css';
 import { fileToDocument } from './components/documentImport';
-import { useStore, exportablePackage } from './store/useStore';
+import { useStore, exportablePackageWithAudio } from './store/useStore';
 import { ChevronRight } from 'lucide-react';
 
 const PANELS = [
@@ -118,9 +119,31 @@ export default function App() {
   }, [ready]);
 
   const [openMenu, setOpenMenu] = useState(null); // null | 'file' | 'edit'
+  const [exportOpen, setExportOpen] = useState(false);
   const [imageSubOpen, setImageSubOpen] = useState(false);
   const imageMode = useViewStore((state) => state.imageMode);
   const setImageMode = useViewStore((state) => state.setImageMode);
+
+  // Con un tema personalizzato le immagini Dither e B&W dei nodi non restano nere: il nero diventa il colore "ink" del tema
+  // e il bianco il colore "paper". Le immagini a colori restano come sono.
+  useEffect(() => {
+    document.documentElement.classList.toggle('img-colore', imageMode === 'colore');
+  }, [imageMode]);
+  const hexToRgb = (hex) => {
+    let h = String(hex || '').replace('#', '').trim();
+    if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+    const n = parseInt(h, 16);
+    return h.length === 6 && !Number.isNaN(n) ? [(n >> 16) & 255, (n >> 8) & 255, n & 255] : null;
+  };
+  const activeCustom = customThemes.find((t) => t.id === theme);
+  const inkRgb = hexToRgb(activeCustom?.ink);
+  const paperRgb = hexToRgb(activeCustom?.paper);
+  const inkMapValues = inkRgb && paperRgb
+    ? [0, 1, 2].map((i) => {
+        const k = (paperRgb[i] - inkRgb[i]) / 255;
+        return `${(0.2126 * k).toFixed(4)} ${(0.7152 * k).toFixed(4)} ${(0.0722 * k).toFixed(4)} 0 ${(inkRgb[i] / 255).toFixed(4)}`;
+      }).join(' ') + ' 0 0 0 1 0'
+    : null;
   const [glossaryWidth, setGlossaryWidth] = useState(30);
   const [mainSplitRatio, setMainSplitRatio] = useState(50);
   const mainAreaRef = useRef(null);
@@ -169,8 +192,9 @@ export default function App() {
   };
 
   // --- Pacchetto .remind: un solo file con mappa, testi e glossario ---
-  const handleSavePackage = () => {
-    const dataStr = JSON.stringify(exportablePackage(useStore.getState()), null, 2);
+  const handleSavePackage = async () => {
+    // Le registrazioni audio vengono incorporate nel file (base64): niente rientri a capo, per non gonfiarlo
+    const dataStr = JSON.stringify(await exportablePackageWithAudio(useStore.getState()));
     const blob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -185,12 +209,12 @@ export default function App() {
     event.target.value = null;
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const raw = JSON.parse(e.target.result);
-        if (!raw || (!raw.documents && !raw.nodes && !raw.editorContent)) throw new Error('formato');
+        if (!raw || (!raw.documents && !raw.projects && !raw.nodes && !raw.editorContent)) throw new Error('formato');
         if (!window.confirm('Aprire questo file sostituirà tutti i quaderni attuali. Continuare?')) return;
-        useStore.getState().loadPackage(raw);
+        await useStore.getState().loadPackage(raw);
       } catch (error) { alert('File non valido: serve un pacchetto .remind (o un vecchio JSON di Re-mind).'); }
     };
     reader.readAsText(file);
@@ -221,6 +245,18 @@ export default function App() {
 
   return (
     <div className="flex flex-col w-screen h-screen bg-gray-100 overflow-hidden font-sans">
+      {/* Tema personalizzato: caselle spuntate e immagini in bianco e nero nei colori del tema */}
+      <style>{`
+        html.themed input[type="checkbox"] { accent-color: var(--ink) !important; }
+        html.themed:not(.img-colore) .react-flow__node img { filter: url(#remind-ink-map) !important; }
+      `}</style>
+      {inkMapValues && (
+        <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
+          <filter id="remind-ink-map" colorInterpolationFilters="sRGB">
+            <feColorMatrix type="matrix" values={inkMapValues} />
+          </filter>
+        </svg>
+      )}
       {/* TOPBAR COMPATTA: logo + menu a sinistra, toggle dei pannelli al centro */}
       <header className="grid grid-cols-[1fr_auto_1fr] items-center px-3 h-10 bg-white border-b-2 border-gray-900 z-50 shrink-0">
         <div className="flex items-center gap-4">
@@ -237,6 +273,8 @@ export default function App() {
             <MenuItem onClick={() => { setOpenMenu(null); textInputRef.current?.click(); }}>Importa testo o PDF…</MenuItem>
             <MenuItem onClick={() => { setOpenMenu(null); fileInputRef.current?.click(); }}>Apri pacchetto…</MenuItem>
             <MenuItem onClick={() => { setOpenMenu(null); handleSavePackage(); }}>Salva pacchetto (.remind)</MenuItem>
+            <div className="border-t-2 border-gray-900" />
+            <MenuItem onClick={() => { setOpenMenu(null); setExportOpen(true); }}>Esporta in PDF…</MenuItem>
           </MenuButton>
 
           <MenuButton
@@ -384,6 +422,7 @@ export default function App() {
       </div>
 
       {editingThemeId && <ThemeEditor id={editingThemeId} onClose={() => setEditingThemeId(null)} />}
+      {exportOpen && <ExportDialog onClose={() => setExportOpen(false)} />}
     </div>
   );
 }
